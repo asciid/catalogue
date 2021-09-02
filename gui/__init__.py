@@ -1,2 +1,2 @@
 import os
-__all__ = os.listdir()
+__all__ = [entity for entity in os.listdir() if entity.endswith(".py")]
