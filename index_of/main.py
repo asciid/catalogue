@@ -76,6 +76,8 @@ class IndexOf:
         start_time = time.time()
         files_created = 1
 
+        old_directory = os.getcwd()
+
         if not os.path.exists(target_root):
             os.mkdir(target_root)
         os.chdir(target_root)
@@ -124,6 +126,8 @@ class IndexOf:
         for directory in root_dirs:
             generate_page(directory)
             files_created += 1
+
+        os.chdir(old_directory)
 
         self.termination_time = time.strftime("%D %H:%m:%S", time.localtime())
         self.running_time = super_round(time.time() - start_time)

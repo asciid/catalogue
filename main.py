@@ -1,32 +1,12 @@
 #!/usr/bin/env python3
 
-"""
-    TODO:
-- Автоматическая проверка/правка метаданных бинарных файлов -> PyPDF2
-- Бинарные файлы
-+ Возможность указать сторонний каталог корня
-- Замена lineEdit в главном окне на statusBar [!!!]
-x Склейка единой базы из каждой книги
-- Обновление listWidget после добавления нового файла
-- Проверить, не удобнее ли обходиться без генерации кода окон
-
-[config.py]
-+ Генерация HTML через index_of
-+ Время генерации через QSettings
-+ Валидация каталога вывода
-
-"""
-
 from index_of.main import IndexOf
-from PyQt5 import QtWidgets, QtCore
-from gui.gui import Ui_MainWindow
-from gui.info import Ui_Dialog as infoDialog
-from gui.config import Ui_Dialog as configDialog
-from gui.add_meta import Ui_Dialog as fillDialog
+from PyQt5 import QtWidgets, QtCore, uic
 import shutil
 import sys
 import os
 
+VERSION = "04.09.21"
 
 ROOT_PATH = "settings/root"
 INDEX_PATH = "settings/index"
@@ -34,6 +14,8 @@ INDEX_DATE = "data/index_date"
 
 ROOT_PATH_DEFAULT = os.path.join(os.getcwd(), "root")
 INDEX_PATH_DEFAULT = os.path.join(os.getcwd(), "index")
+
+GREETING_MESSAGE = "Добро пожаловать в catalogue [{}]".format(VERSION)
 
 
 def get_files():
@@ -99,15 +81,15 @@ def extract_metadata(path):
                 line = line[:-1]
             key, value = line.split("=")
             metadata.update({key: value})
-    #print(path.replace(metadata["TITLE"], ""))
     return metadata
 
 
 class FillDialogWindow(QtWidgets.QDialog):
     def __init__(self):
         super().__init__()
-        self.ui = fillDialog()
-        self.ui.setupUi(self)
+        self.ui = uic.loadUi("gui/add_meta.ui", self)
+        #self.ui = gui.add_meta.Ui_Dialog()
+        #self.ui.setupUi(self)
 
         self.path = ""
         self.form_data = {
@@ -177,6 +159,8 @@ class FillDialogWindow(QtWidgets.QDialog):
         self.hide()
 
     def list_info(self, path):
+        path = os.path.join(os.getcwd(), "root", path[1:])
+        print(path)
         self.form_data["PATH"] = path
 
         with open(path+".meta", "r+") as file:
@@ -186,7 +170,6 @@ class FillDialogWindow(QtWidgets.QDialog):
                 key_value = line.split("=")
                 self.form_data.update({key_value[0]: key_value[1]})
 
-        #print(self.form_data)
         self.update_window()
 
     def pass_path(self, path):
@@ -194,8 +177,8 @@ class FillDialogWindow(QtWidgets.QDialog):
         self.list_info(self.path)
 
     def show_window(self):
-        self.exec_()
         self.show()
+        self.exec_()
 
     def update_window(self):
         self.ui.lineEdit.setText(self.form_data["TITLE"])
@@ -212,11 +195,10 @@ class FillDialogWindow(QtWidgets.QDialog):
 class InfoDialogWindow(QtWidgets.QDialog):
     def __init__(self):
         super().__init__()
-        self.ui = infoDialog()
-        self.ui.setupUi(self)
+        self.ui = uic.loadUi("gui/info.ui", self)
         self.get_info()
-        self.exec_()
         self.show()
+        self.exec_()
 
     def get_info(self):
         count, size, authors = get_statistics()
@@ -231,16 +213,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         super().__init__()
 
+        self.settings = QtCore.QSettings()
         self.set_options()
 
-        self.clear = False
+        self.list_is_empty = True
+        self.button_locked = False
 
-        self.ui = Ui_MainWindow()
-        self.ui.setupUi(self)
+        self.ui = uic.loadUi("gui/main.ui", self)
 
-        self.ui.lineEdit.setText("Добро пожаловать в catalogue!")
+        self.status_bar = self.statusBar()
+        self.status_bar.showMessage(GREETING_MESSAGE)
 
         self.ui.listWidget.itemDoubleClicked.connect(self.show_entity_info)
+
         self.ui.pushButton.clicked.connect(self.btn_clicked)
         self.ui.pushButton_3.clicked.connect(self.show_info)
         self.ui.pushButton_4.clicked.connect(self.upload_file)
@@ -255,59 +240,71 @@ class MainWindow(QtWidgets.QMainWindow):
         win = FillDialogWindow()
         win.show_window()
 
+        self.refresh_list()
+
     def show_dialog(self):
         FillDialogWindow()
         self.list_clear()
         self.list_scan()
 
     def btn_clicked(self):
-        if not self.clear:
-            self.list_clear()
+        if self.list_is_empty:
+            self.update_list()
+            self.ui.pushButton.setEnabled(False)
         else:
-            self.list_scan()
+            self.clear_list()
 
-    def list_scan(self):
+    def clear_list(self):
         self.ui.listWidget.clear()
-        self.ui.lineEdit.clear()
-        self.ui.pushButton.setText("Сканировать")
-        self.clear = False
+        self.ui.listWidget.setWordWrap(True)
 
-    def list_clear(self):
+        self.status_bar.clearMessage()
+
+        self.ui.pushButton.setText("Обновить")
+
+        self.list_is_empty = True
+
+    def refresh_list(self):
+        self.ui.listWidget.clear()
+        self.update_list()
+
+    def update_list(self):
         data, count = get_files()
-        self.ui.lineEdit.setText("Найдено {} книг(и).".format(count))
-        if data:
-            self.ui.listWidget.setWordWrap(True)
 
+        self.ui.listWidget.setWordWrap(True)
+
+        self.status_bar.showMessage("Найдено {} книг(и).".format(count))
+        #self.ui.listWidget.setWordWrap(True)
+        if count:
             for item in data:
-                self.ui.listWidget.addItem(item.replace(QtCore.QSettings().value(ROOT_PATH), ""))
+                self.ui.listWidget.addItem(item.replace(os.path.join(
+                    QtCore.QSettings().value(ROOT_PATH)), ""))
 
-            #self.ui.listWidget.addItems(data)
-            self.ui.pushButton.setText("Очистить")
-            self.clear = True
+            #self.ui.pushButton.setText("Обновить")
+            self.list_is_empty = False
         else:
-            self.ui.lineEdit.setText("Ничего не найдено!")
+            self.status_bar.showMessage("Ничего не найдено!")
 
     def show_info(self):
         InfoDialogWindow()
 
     def set_options(self):
+
         QtCore.QCoreApplication.setOrganizationName("null")
         QtCore.QCoreApplication.setOrganizationDomain("nodomain")
         QtCore.QCoreApplication.setApplicationName("catalogue")
 
-        settings = QtCore.QSettings()
+        self.settings.value(ROOT_PATH, type=str)
+        self.settings.value(INDEX_PATH, type=str)
+        self.settings.value(INDEX_DATE, type=str)
 
-        settings.value(ROOT_PATH, type=str)
-        settings.value(INDEX_PATH, type=str)
-        settings.value(INDEX_DATE, type=str)
+        if not self.settings.value(INDEX_PATH):
+            self.settings.setValue(INDEX_PATH, INDEX_PATH_DEFAULT)
 
-        if not settings.value(INDEX_PATH):
-            settings.setValue(INDEX_PATH, INDEX_PATH_DEFAULT)
+        if not self.settings.value(ROOT_PATH):
+            self.settings.setValue(ROOT_PATH, ROOT_PATH_DEFAULT)
 
-        if not settings.value(ROOT_PATH):
-            settings.setValue(ROOT_PATH, ROOT_PATH_DEFAULT)
-
-        settings.sync()
+        self.settings.sync()
 
     def config(self):
         ConfigDialogWindow(self)
@@ -317,8 +314,9 @@ class ConfigDialogWindow(QtWidgets.QDialog):
     def __init__(self, root):
         super().__init__()
         self.root = root
-        self.ui = configDialog()
-        self.ui.setupUi(self)
+        #self.ui = gui.config.Ui_Dialog()
+        self.ui = uic.loadUi("gui/config.ui", self)
+        #self.ui.setupUi(self)
 
         self.settings = QtCore.QSettings()
         self.root_path = self.settings.value(ROOT_PATH)
@@ -350,19 +348,20 @@ class ConfigDialogWindow(QtWidgets.QDialog):
                         access_error = True
                 else:
                     if os.access(folder, os.W_OK):
-                        os.makedirs(folder)
+                        os.mkdir(folder)
                     else:
+                        os.mkdir(folder)
                         err_folder = folder
                         access_error = True
         else:
             if root_path == "": root_path = ROOT_PATH_DEFAULT
             if index_path == "":
                 index_path = INDEX_PATH_DEFAULT
-                self.settings.setValue(INDEX_DATE, 0)
-            self.root.ui.lineEdit.setText("Пустые значения недопустимы. Установлены каталоги по умолчанию.")
+                self.settings.setValue(INDEX_DATE, "")
+            self.root.status_bar.showMessage("Пустые значения недопустимы. Установлены каталоги по умолчанию.")
 
         if access_error:
-            self.root.ui.lineEdit.setText("Недостаточно привилегий для записи в {}!".format(err_folder))
+            self.root.status_bar.showMessage("Недостаточно привилегий для записи в {}!".format(err_folder))
 
         else:
             self.settings.setValue(ROOT_PATH, root_path)
@@ -374,7 +373,7 @@ class ConfigDialogWindow(QtWidgets.QDialog):
     def index(self):
         index = IndexOf(self.root_path, self.index_path)
 
-        self.root.ui.lineEdit.setText("Индекс успешно обновлён. Добавлено файлов: {}".format(index.files_created))
+        self.root.status_bar.showMessage("Индекс успешно обновлён. Добавлено файлов: {}".format(index.files_created))
 
         self.settings.setValue(INDEX_DATE, index.termination_time)
         self.settings.sync()
