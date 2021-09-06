@@ -22,6 +22,7 @@ def generate_css(root):
 
     with open(css_path, "w") as css:
         css.write("body { color: white; background: black; }")
+        css.write("a { color: white; }")
 
 
 def generate_page(path, is_root=False, is_bottom=False):
@@ -121,6 +122,7 @@ class IndexOf:
 
         # Мы в каталоге root/
         generate_page(cwd, is_root=True)
+        generate_css(cwd)
 
         # Прогон для заполнения
         for directory in root_dirs:

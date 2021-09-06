@@ -6,6 +6,12 @@ import shutil
 import sys
 import os
 
+from gui import main
+from PyQt5.QtWidgets import QTreeWidgetItem
+
+import webbrowser
+
+
 VERSION = "04.09.21"
 
 ROOT_PATH = "settings/root"
@@ -159,7 +165,7 @@ class FillDialogWindow(QtWidgets.QDialog):
         self.hide()
 
     def list_info(self, path):
-        path = os.path.join(os.getcwd(), "root", path[1:])
+        #path = os.path.join(os.getcwd(), "root", path[1:])
         print(path)
         self.form_data["PATH"] = path
 
@@ -219,71 +225,92 @@ class MainWindow(QtWidgets.QMainWindow):
         self.list_is_empty = True
         self.button_locked = False
 
-        self.ui = uic.loadUi("gui/main.ui", self)
+        #self.ui = uic.loadUi("gui/main.ui", self)
+        self.ui = main.Ui_MainWindow()
+        self.ui.setupUi(self)
+
+
+        # DRAFT BEGINNING
+
+        self.fill_tree()
+
+        # DRAFT END
+
 
         self.status_bar = self.statusBar()
         self.status_bar.showMessage(GREETING_MESSAGE)
 
-        self.ui.listWidget.itemDoubleClicked.connect(self.show_entity_info)
+        #self.ui.listWidget.itemDoubleClicked.connect(self.show_entity_info)
 
-        self.ui.pushButton.clicked.connect(self.btn_clicked)
+        self.ui.pushButton.clicked.connect(self.open_index)
         self.ui.pushButton_3.clicked.connect(self.show_info)
         self.ui.pushButton_4.clicked.connect(self.upload_file)
         self.ui.toolButton.clicked.connect(self.config)
 
-    def show_entity_info(self):
-        win = FillDialogWindow()
-        win.pass_path(self.ui.listWidget.currentItem().text())
-        win.show_window()
+    # DRAFT FUNCTIONS
+    def get_entity(self):
+        item = self.ui.treeWidget.currentItem()
+        if item.childCount() == 0:
+            path = os.path.join(self.root_folder, item.parent().parent().text(0), item.parent().text(0),item.text(0)) 
+            win = FillDialogWindow()
+            win.pass_path(path)
+            win.show_window()
+    
+    def open_index(self):
+        path = self.settings.value(INDEX_PATH)
+        if os.listdir(path):
+            webbrowser.open(os.path.join(path, "index.html"))
+        else:
+            self.ui.status_bar.showMessage("Каталог пуст!")
+
+    def fill_tree(self):
+        item = QTreeWidgetItem()
+        self.root_folder = self.settings.value(ROOT_PATH)
+
+        for root_entity in os.listdir(self.root_folder):
+
+            root_item = QTreeWidgetItem()
+            root_item.setText(0, root_entity)
+            
+            self.ui.treeWidget.addTopLevelItem(root_item)
+
+            for subfolder in os.listdir(os.path.join(self.root_folder, root_entity)):
+                
+                subfolder_item = QTreeWidgetItem()
+                subfolder_item.setText(0, subfolder)
+                
+                root_item.addChild(subfolder_item)
+
+
+                for file in os.listdir(os.path.join(self.root_folder, root_entity, subfolder)):
+                    
+                    if not file.endswith(".meta"):
+
+                        file_item = QTreeWidgetItem()
+                        file_item.setText(0, file)
+                        subfolder_item.addChild(file_item)
+
+        self.ui.treeWidget.itemDoubleClicked.connect(self.get_entity)
+
+
+    def refresh_tree(self):
+        self.ui.treeWidget.clear()
+        self.fill_tree()
+    # DRAFT FUNCTIONS
+
 
     def upload_file(self):
         win = FillDialogWindow()
         win.show_window()
 
-        self.refresh_list()
+        self.refresh_tree()
+
 
     def show_dialog(self):
         FillDialogWindow()
-        self.list_clear()
-        self.list_scan()
+        
+        #self.refresh_tree()
 
-    def btn_clicked(self):
-        if self.list_is_empty:
-            self.update_list()
-            self.ui.pushButton.setEnabled(False)
-        else:
-            self.clear_list()
-
-    def clear_list(self):
-        self.ui.listWidget.clear()
-        self.ui.listWidget.setWordWrap(True)
-
-        self.status_bar.clearMessage()
-
-        self.ui.pushButton.setText("Обновить")
-
-        self.list_is_empty = True
-
-    def refresh_list(self):
-        self.ui.listWidget.clear()
-        self.update_list()
-
-    def update_list(self):
-        data, count = get_files()
-
-        self.ui.listWidget.setWordWrap(True)
-
-        self.status_bar.showMessage("Найдено {} книг(и).".format(count))
-        #self.ui.listWidget.setWordWrap(True)
-        if count:
-            for item in data:
-                self.ui.listWidget.addItem(item.replace(os.path.join(
-                    QtCore.QSettings().value(ROOT_PATH)), ""))
-
-            #self.ui.pushButton.setText("Обновить")
-            self.list_is_empty = False
-        else:
-            self.status_bar.showMessage("Ничего не найдено!")
 
     def show_info(self):
         InfoDialogWindow()
